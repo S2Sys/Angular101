@@ -479,6 +479,146 @@ In this project, you'll see all these patterns in action:
 - Safari (latest)
 - Edge (latest)
 
+## 📋 Quick Reference Cheat Sheets
+
+### RxJS Operators Quick Lookup
+
+| Operator | What It Does | When to Use | Example |
+|----------|-------------|------------|---------|
+| **map** | Transform each value | Change shape of data | `map(x => x * 2)` |
+| **filter** | Keep matching values | Remove unwanted data | `filter(x => x > 5)` |
+| **debounceTime** | Wait for silence | Search input, auto-save | `debounceTime(300)` |
+| **distinctUntilChanged** | Skip duplicates | Avoid redundant calls | `distinctUntilChanged()` |
+| **switchMap** | Cancel previous, switch to new | Search, route params | `switchMap(id => getUser(id))` |
+| **takeUntil** | Stop on signal | Clean up subscriptions | `takeUntil(destroy$)` |
+| **shareReplay(1)** | Share & cache result | Avoid duplicate requests | `shareReplay(1)` |
+| **combineLatest** | All emit, then sync | Form with multiple inputs | `combineLatest([obs1, obs2])` |
+| **forkJoin** | Wait for all to complete | Load multiple resources | `forkJoin({a: obs1, b: obs2})` |
+| **catchError** | Handle errors | Error recovery | `catchError(err => of([]))` |
+
+### Component Communication Decision Tree
+
+```
+Which pattern should you use?
+
+├─ Direct parent-child? (Same component tree)
+│  └─ Use @Input/@Output
+│     • Parent passes data via [prop]="value"
+│     • Child emits via (event)="handler($event)"
+│
+├─ Siblings or distant components?
+│  └─ Use Shared Service + Subject
+│     • Create service with Subject
+│     • One component emits: service.sendData(value)
+│     • Other component listens: service.data$.subscribe()
+│
+└─ App-wide state? (Many components, complex)
+   └─ Use Global Store Service
+      • Create store with BehaviorSubject
+      • All components inject store
+      • Use: store.property$ | async
+```
+
+### Observable Patterns Quick Selection
+
+| Pattern | What It Does | Use When | Result |
+|---------|-------------|----------|--------|
+| **combineLatest** | Merge multiple streams | Any stream changes → emit | Multiple values over time |
+| **forkJoin** | Wait for all to finish | All HTTP calls done → emit | Single emission with all results |
+| **merge** | Combine any emissions | Multiple sources emit | Any source emits → emit |
+| **zip** | Pair values from streams | Both streams emit → pair | Paired values |
+| **switchMap** | Cancel old, start new | User searches → new search | Cancels previous requests |
+| **debounceTime** | Wait for silence | User stops typing → proceed | Single emission after quiet period |
+
+### Best Practices Checklist
+
+#### ✅ DO:
+- Use `takeUntil(destroy$)` to clean up subscriptions
+- Use `async` pipe in templates for auto-cleanup
+- Use `shareReplay(1)` for shared operations
+- Type your observables: `Observable<Note[]>`
+- Use `debounceTime` for user input
+- Use `@Input/@Output` for parent-child
+- Use services for cross-component communication
+- Handle errors with `catchError`
+
+#### ❌ DON'T:
+- Subscribe without unsubscribing
+- Nest multiple `.subscribe()` calls
+- Use `Promise` for continuous streams
+- Trust user input without validation
+- Leave console.logs in production
+- Update `@Input` properties directly
+- Store sensitive data in localStorage
+- Skip error handling
+
+### Observable vs Promise Quick Ref
+
+| Feature | Observable | Promise |
+|---------|-----------|---------|
+| **Multiple Values** | ✅ Yes | ❌ No (one value) |
+| **Cancellable** | ✅ Yes | ❌ No |
+| **Lazy** | ✅ Yes | ❌ Executes immediately |
+| **Retryable** | ✅ Easy with `retry()` | ❌ Complex |
+| **Chainable** | ✅ Multiple operators | ⚠️ .then() chains |
+| **Memory** | ⚠️ Manual cleanup | ✅ Auto cleanup |
+| **Use For** | Streams, events, HTTP | One-time operations |
+
+### Common Patterns & Use Cases
+
+#### Pattern 1: Debounced Search
+```typescript
+// User types → wait 300ms → search
+searchTerm$.pipe(
+  debounceTime(300),
+  distinctUntilChanged(),
+  switchMap(term => api.search(term))
+).subscribe(results => {})
+```
+**Remember:** switchMap cancels previous searches
+
+#### Pattern 2: Load Multiple Resources
+```typescript
+// Load user, posts, settings in parallel
+forkJoin({
+  user: api.getUser(),
+  posts: api.getPosts(),
+  settings: api.getSettings()
+}).subscribe(({user, posts, settings}) => {})
+```
+**Remember:** Waits for ALL to complete, emits once
+
+#### Pattern 3: Filter & Transform Data
+```typescript
+// Show only completed notes, sorted by date
+combineLatest([notes$, filter$]).pipe(
+  map(([notes, filter]) => 
+    notes.filter(n => n.status === filter)
+         .sort((a, b) => b.date - a.date)
+  )
+).subscribe(filtered => {})
+```
+**Remember:** Emits when either notes or filter changes
+
+#### Pattern 4: Clean Component Unsubscribe
+```typescript
+private destroy$ = new Subject<void>();
+
+ngOnInit() {
+  this.service.data$
+    .pipe(takeUntil(this.destroy$))
+    .subscribe(data => { /* use data */ });
+}
+
+ngOnDestroy() {
+  this.destroy$.next();
+  this.destroy$.complete();
+}
+```
+**Remember:** Always cleanup on component destroy
+
+---
+
 ## Next Steps
 
 ### 📖 Deepen Your Knowledge

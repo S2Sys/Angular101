@@ -73,6 +73,54 @@ export const routes: Routes = [
   },
 
   // ============================================================================
+  // LEARNING EXAMPLES ROUTES (Public, for learning)
+  // ============================================================================
+
+  {
+    path: 'examples',
+    loadComponent: () =>
+      import('@pages/examples/examples.component').then((m) => m.ExamplesComponent),
+    data: { title: 'Learning Examples' },
+    children: [
+      {
+        path: 'parent-child',
+        loadComponent: () =>
+          import('@pages/examples/parent-child.component').then((m) => m.ParentChildComponent),
+        data: { title: 'Parent to Child' }
+      },
+      {
+        path: 'child-parent',
+        loadComponent: () =>
+          import('@pages/examples/child-parent.component').then((m) => m.ChildParentComponent),
+        data: { title: 'Child to Parent' }
+      },
+      {
+        path: 'siblings',
+        loadComponent: () =>
+          import('@pages/examples/siblings.component').then((m) => m.SiblingsComponent),
+        data: { title: 'Sibling Communication' }
+      },
+      {
+        path: 'global-state',
+        loadComponent: () =>
+          import('@pages/examples/global-state.component').then((m) => m.GlobalStateComponent),
+        data: { title: 'Global State' }
+      },
+      {
+        path: 'observables',
+        loadComponent: () =>
+          import('@pages/examples/observables.component').then((m) => m.ObservablesComponent),
+        data: { title: 'Observable Patterns' }
+      },
+      {
+        path: '',
+        redirectTo: 'parent-child',
+        pathMatch: 'full'
+      }
+    ]
+  },
+
+  // ============================================================================
   // DEFAULT & CATCH-ALL ROUTES
   // ============================================================================
 

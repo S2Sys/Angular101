@@ -564,6 +564,65 @@ Which pattern should you use?
 | **Memory** | ⚠️ Manual cleanup | ✅ Auto cleanup |
 | **Use For** | Streams, events, HTTP | One-time operations |
 
+### Async Pipe Quick Reference
+
+#### What It Does
+The `async` pipe automatically subscribes to observables in templates and unsubscribes when component destroys.
+
+#### Basic Usage
+```typescript
+// Component
+data$ = this.service.getData();
+
+// Template - AUTO SUBSCRIBE & UNSUBSCRIBE
+{{ data$ | async }}
+```
+
+#### Why Use It
+✅ **Auto-cleanup** - No memory leaks  
+✅ **Cleaner code** - No manual `.subscribe()`  
+✅ **OnPush ready** - Works with change detection  
+✅ **Safer** - Less code, fewer bugs  
+
+#### Common Patterns
+
+```typescript
+// Pattern 1: Simple display
+{{ data$ | async }}
+
+// Pattern 2: With local variable (prevents multiple subscriptions)
+<div *ngIf="data$ | async as data">
+  {{ data.name }}
+  {{ data.email }}
+</div>
+
+// Pattern 3: In *ngFor
+<div *ngFor="let item of items$ | async">
+  {{ item }}
+</div>
+
+// Pattern 4: Multiple async pipes (use combineLatest)
+combined$ = combineLatest([user$, posts$]).pipe(
+  map(([user, posts]) => ({user, posts}))
+);
+<div *ngIf="combined$ | async as data">
+  {{ data.user.name }} - {{ data.posts.length }} posts
+</div>
+```
+
+#### ❌ DON'T DO This
+```typescript
+// ❌ Multiple async = multiple subscriptions
+{{ data$ | async }}
+{{ data$ | async }}  <!-- SEPARATE SUBSCRIPTION! -->
+
+// ✅ DO THIS - Use local variable
+<ng-container *ngIf="data$ | async as data">
+  <p>{{ data }}</p>
+  <p>{{ data }}</p>  <!-- Same subscription -->
+</ng-container>
+```
+
 ### Common Patterns & Use Cases
 
 #### Pattern 1: Debounced Search

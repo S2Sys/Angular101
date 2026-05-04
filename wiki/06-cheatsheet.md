@@ -588,6 +588,266 @@ retry$ = http.get(url).pipe(retry({count: 3, delay: 1000}))
 
 ---
 
+## Pipes & Async Pipes
+
+### What is a Pipe?
+
+A pipe transforms data in templates. Uses `|` syntax.
+
+```typescript
+// Syntax: data | pipeName:arg1:arg2
+{{ name | uppercase }}
+{{ price | currency:'USD' }}
+{{ date | date:'short' }}
+```
+
+### Built-In Pipes Quick Reference
+
+| Pipe | Purpose | Example |
+|------|---------|---------|
+| `uppercase` | Convert to uppercase | `{{ text \| uppercase }}` |
+| `lowercase` | Convert to lowercase | `{{ text \| lowercase }}` |
+| `titlecase` | Title Case Format | `{{ text \| titlecase }}` |
+| `currency` | Format as currency | `{{ price \| currency:'USD' }}` |
+| `number` | Format number | `{{ value \| number:'1.2-2' }}` |
+| `percent` | Format as percentage | `{{ value \| percent }}` |
+| `date` | Format date | `{{ date \| date:'short' }}` |
+| `slice` | Get substring/subarray | `{{ text \| slice:0:5 }}` |
+| `json` | Convert to JSON | `{{ obj \| json }}` |
+| `keyvalue` | Iterate object entries | `{{ obj \| keyvalue }}` |
+
+### ⭐ Async Pipe (Most Important)
+
+The `async` pipe subscribes to observables and unsubscribes automatically on destroy.
+
+#### Basic Usage
+
+```typescript
+// Component
+export class MyComponent {
+  data$ = this.api.getData();  // Observable<Data>
+}
+
+// Template
+{{ data$ | async }}  // Automatically subscribes & unsubscribes
+```
+
+#### Why Use Async Pipe?
+
+| Feature | With Async | Without Async |
+|---------|-----------|---------------|
+| **Auto Subscribe** | ✅ Yes | ❌ Manual `.subscribe()` |
+| **Auto Unsubscribe** | ✅ Yes (OnDestroy) | ❌ Manual cleanup needed |
+| **Memory Leak Risk** | ✅ None | ❌ High risk |
+| **OnPush Compatible** | ✅ Yes | ⚠️ Needs manual |
+| **Code Cleaner** | ✅ Yes | ❌ More verbose |
+
+#### Pattern: Using Async Pipe
+
+```typescript
+// ✅ GOOD - Auto cleanup
+export class Component {
+  data$ = this.service.getData();
+}
+
+// Template
+{{ data$ | async }}
+
+// ✅ GOOD - In *ngIf with async
+<div *ngIf="data$ | async as data">
+  {{ data.name }}
+</div>
+
+// ✅ GOOD - In *ngFor with async
+<div *ngFor="let item of items$ | async">
+  {{ item }}
+</div>
+
+// ✅ GOOD - Store in local variable
+<ng-container *ngIf="data$ | async as data">
+  <p>{{ data.name }}</p>
+  <p>{{ data.email }}</p>
+</ng-container>
+```
+
+#### ❌ Don't Do This
+
+```typescript
+// ❌ BAD - Multiple async pipes = multiple subscriptions
+<p>{{ data$ | async }}</p>
+<p>{{ data$ | async }}</p>  <!-- Separate subscription! -->
+
+// ✅ GOOD - Use local variable
+<ng-container *ngIf="data$ | async as data">
+  <p>{{ data.property1 }}</p>
+  <p>{{ data.property2 }}</p>
+</ng-container>
+
+// ❌ BAD - Function in template with async
+get userName() {
+  return this.user$ | async;  // ❌ Wrong! Returns observable
+}
+
+// ✅ GOOD - Use property
+userName$ = this.user$.pipe(map(u => u.name));
+// {{ userName$ | async }}
+```
+
+#### Advanced: Multiple Observables with Async
+
+```typescript
+// Use *ngIf with comma-separated
+<div *ngIf="user$ | async as user">
+  <div *ngIf="posts$ | async as posts">
+    <p>{{ user.name }}</p>
+    <p>Posts: {{ posts.length }}</p>
+  </div>
+</div>
+
+// Better: Use tuple unpacking (Angular 18+)
+<div *ngIf="(user$ | async) as user">
+  <div *ngIf="(posts$ | async) as posts">
+    {{ user.name }} - {{ posts.length }} posts
+  </div>
+</div>
+
+// Better yet: Use combineLatest in component
+combined$ = combineLatest([user$, posts$]).pipe(
+  map(([user, posts]) => ({user, posts}))
+);
+
+// Template - single subscription
+<div *ngIf="combined$ | async as data">
+  {{ data.user.name }} - {{ data.posts.length }} posts
+</div>
+```
+
+### Custom Pipes
+
+```typescript
+// Create pipe
+@Pipe({
+  name: 'safe',
+  standalone: true
+})
+export class SafePipe implements PipeTransform {
+  transform(value: any): SafeHtml {
+    return this.sanitizer.sanitize(SecurityContext.HTML, value) || '';
+  }
+}
+
+// Use in template
+{{ htmlContent | safe }}
+```
+
+### Pipe Chaining
+
+Chain multiple pipes together:
+
+```typescript
+// Multiple pipes
+{{ price | currency:'USD' | uppercase }}
+
+// With arguments
+{{ date | date:'short' | uppercase }}
+
+// Common pattern: format then display
+{{ amount | number:'1.2-2' | currency:'USD' }}
+```
+
+### RxJS Operators That Act Like Pipes
+
+These RxJS operators "pipe" data transformations:
+
+```typescript
+// Inside pipe() method:
+observable$.pipe(
+  map(x => x * 2),           // Transform
+  filter(x => x > 10),       // Filter
+  take(5),                   // Limit
+  debounceTime(300),         // Throttle
+  distinctUntilChanged()     // Deduplicate
+).subscribe(result => {});
+```
+
+### Async Pipe Performance Pattern
+
+```typescript
+// ✅ BEST - Optimized with OnPush
+@Component({
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class MyComponent {
+  // Only observables, no properties
+  data$ = this.service.getData();
+  loading$ = this.service.loading$;
+  error$ = this.service.error$;
+}
+
+// Template
+<div *ngIf="loading$ | async">Loading...</div>
+<div *ngIf="error$ | async as error">{{ error }}</div>
+<div *ngIf="data$ | async as data">{{ data }}</div>
+```
+
+### Common Async Pipe Patterns
+
+#### Pattern 1: Loading State
+```typescript
+// Component
+loading$ = this.service.loading$;
+data$ = this.service.data$;
+
+// Template
+<div *ngIf="loading$ | async">Loading...</div>
+<div *ngIf="!(loading$ | async)">
+  {{ data$ | async | json }}
+</div>
+```
+
+#### Pattern 2: Error Handling
+```typescript
+// Component
+data$ = this.service.getData().pipe(
+  catchError(err => {
+    this.error = err;
+    return of(null);
+  })
+);
+
+// Template
+<div *ngIf="data$ | async as data; else error">
+  {{ data }}
+</div>
+<ng-template #error>
+  <p>Error loading data</p>
+</ng-template>
+```
+
+#### Pattern 3: Form with Async Data
+```typescript
+// Component
+user$ = this.api.getUser(id);
+
+// Template
+<form *ngIf="user$ | async as user">
+  <input [(ngModel)]="user.name">
+  <input [(ngModel)]="user.email">
+</form>
+```
+
+#### Pattern 4: Conditional Rendering
+```typescript
+// Component
+admin$ = this.auth.isAdmin$;
+
+// Template
+<button *ngIf="admin$ | async">Admin Actions</button>
+<div *ngIf="!(admin$ | async)">Guest View</div>
+```
+
+---
+
 ## Common Gotchas
 
 | Issue | Solution |
@@ -600,6 +860,8 @@ retry$ = http.get(url).pipe(retry({count: 3, delay: 1000}))
 | Lost context (this) | Use arrow functions `=>` not `function` |
 | Wrong type in observable | Use generics: `Observable<Type>` |
 | BehaviorSubject not updating | Call `.next()` to emit new value |
+| Multiple async subscriptions | Use local variable: `as data` |
+| Async pipe not working | Observable might not emit or error |
 
 ---
 

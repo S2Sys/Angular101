@@ -5,11 +5,16 @@ Quick reference guide for the most common patterns and operations.
 ## Table of Contents
 1. [RxJS Operators](#rxjs-operators)
 2. [Observable Creation](#observable-creation)
-3. [Component Communication](#component-communication)
-4. [Common Patterns](#common-patterns)
-5. [Error Handling](#error-handling)
-6. [Performance Tips](#performance-tips)
-7. [Anti-Patterns to Avoid](#anti-patterns-to-avoid)
+3. [Subject Types Deep Dive](#subject-types-deep-dive)
+4. [Hot vs Cold Observables](#hot-vs-cold-observables)
+5. [Component Communication](#component-communication)
+6. [Change Detection & OnPush](#change-detection--onpush-strategy)
+7. [Reactive Forms Deep Dive](#reactive-forms-deep-dive)
+8. [Common Patterns](#common-patterns)
+9. [Error Handling](#error-handling)
+10. [Performance Tips](#performance-tips)
+11. [Anti-Patterns to Avoid](#anti-patterns-to-avoid)
+12. [Pipes & Async Pipes](#pipes--async-pipes)
 
 ---
 
@@ -584,6 +589,324 @@ click$ = fromEvent(button, 'click')
 
 // Retry failed requests
 retry$ = http.get(url).pipe(retry({count: 3, delay: 1000}))
+```
+
+---
+
+## Subject Types Deep Dive
+
+### Subject vs Observable
+
+| Feature | Observable | Subject |
+|---------|-----------|---------|
+| **Source** | External data source | Both source & observer |
+| **Emit** | Internal only | Explicit `.next()` |
+| **Subscriber** | Read-only | Can emit values |
+| **Hot** | Cold (by default) | Hot (shared) |
+| **Use Case** | Data streams (HTTP, events) | Inter-component communication |
+
+### All Subject Types
+
+```typescript
+// 1. SUBJECT - Basic, no initial value
+const subject = new Subject<string>();
+subject.next('hello');
+subject.subscribe(x => console.log(x));  // Nothing, missed it
+subject.next('world');  // Logs: world
+
+// 2. BEHAVIOR SUBJECT - Has initial value
+const bs = new BehaviorSubject<string>('initial');
+bs.subscribe(x => console.log(x));  // Logs: initial (immediately!)
+bs.next('updated');
+bs.value;  // Can get current value
+
+// 3. REPLAY SUBJECT - Remembers last N emissions
+const replay$ = new ReplaySubject<number>(2);  // Buffer size: 2
+replay$.next(1);
+replay$.next(2);
+replay$.next(3);
+replay$.subscribe(x => console.log(x));  // Logs: 2, 3 (last 2)
+
+// 4. ASYNC SUBJECT - Emits only last value when complete
+const async$ = new AsyncSubject<number>();
+async$.next(1);
+async$.next(2);
+async$.next(3);
+async$.subscribe(x => console.log(x));  // Nothing yet
+async$.complete();  // Now logs: 3 (only last!)
+```
+
+### When to Use Each Subject
+
+| Subject | When | Example |
+|---------|------|---------|
+| **Subject** | Event broadcasting | Button clicks, notifications |
+| **BehaviorSubject** | State management | Current user, app settings |
+| **ReplaySubject** | Show history | Last 10 messages in chat |
+| **AsyncSubject** | Final result | Last value of operation |
+
+---
+
+## Hot vs Cold Observables
+
+### Cold Observable (Unicast)
+
+Each subscriber gets its own independent execution.
+
+```typescript
+// Cold - Creates NEW HTTP request per subscriber
+const cold$ = this.http.get('/api/data');
+
+cold$.subscribe(data => console.log('Sub1:', data));  // HTTP Call 1
+cold$.subscribe(data => console.log('Sub2:', data));  // HTTP Call 2 - SEPARATE!
+
+// Two HTTP requests! ❌ Inefficient
+```
+
+**Characteristics:**
+- ✅ Fresh data for each subscriber
+- ✅ Doesn't start until subscribed
+- ✅ Each subscriber gets own data
+- ❌ Duplicate work/requests
+
+### Hot Observable (Multicast)
+
+All subscribers share the same execution.
+
+```typescript
+// Hot - Shares SINGLE HTTP request with all subscribers
+const hot$ = this.http.get('/api/data').pipe(shareReplay(1));
+
+hot$.subscribe(data => console.log('Sub1:', data));   // HTTP Call 1
+hot$.subscribe(data => console.log('Sub2:', data));   // Same data!
+
+// One HTTP request shared! ✅ Efficient
+```
+
+**Characteristics:**
+- ✅ Shared data for all subscribers
+- ✅ Starts regardless of subscribers
+- ✅ More efficient
+- ❌ Late subscribers miss previous values
+
+### How to Make Cold → Hot
+
+```typescript
+// Method 1: shareReplay(n) - Cache last n emissions
+cold$ = this.http.get('/api/data');
+hot$ = cold$.pipe(shareReplay(1));  // ✅ Hot now
+
+// Method 2: share() - Share without cache
+hot$ = cold$.pipe(share());
+
+// Method 3: Subject - Explicitly hot
+const subject = new Subject();
+cold$.subscribe(subject);
+subject.subscribe(subscriber1);
+subject.subscribe(subscriber2);
+```
+
+---
+
+## Change Detection & OnPush Strategy
+
+### Default Change Detection
+
+Angular checks entire component tree for changes.
+
+```typescript
+// ❌ Default - Checks every time, slower for large trees
+@Component({
+  selector: 'app-card',
+  template: '{{ item.name }}'
+})
+export class CardComponent {
+  @Input() item: any;
+}
+```
+
+### OnPush Change Detection
+
+Only checks when @Input changes or events fire.
+
+```typescript
+// ✅ OnPush - Faster, checks only when needed
+@Component({
+  selector: 'app-card',
+  template: '{{ item.name }}',
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class CardComponent {
+  @Input() item: any;  // ⚠️ Must be immutable!
+}
+```
+
+### OnPush Best Practices
+
+```typescript
+@Component({
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class OptimizedComponent {
+  // ✅ Use immutable objects
+  @Input() user!: {name: string, email: string};
+
+  // ✅ Use async pipe
+  data$ = this.service.data$;
+
+  // ✅ Keep observables, avoid properties
+  // Don't do: this.data = null; then call API
+
+  // ✅ Emit events, don't modify data
+  @Output() updated = new EventEmitter<User>();
+
+  onSave() {
+    this.updated.emit(newUser);  // Don't modify, emit!
+  }
+}
+```
+
+### Performance Pattern
+
+```typescript
+// ✅ BEST - Optimized with OnPush + async pipe
+@Component({
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class MyComponent {
+  // Only observables, no properties
+  users$ = this.service.getUsers();
+  selected$ = this.service.getSelected();
+}
+
+// Template
+<div *ngFor="let user of users$ | async">
+  {{ user.name }}
+</div>
+```
+
+---
+
+## Reactive Forms Deep Dive
+
+### FormControl (Single Field)
+
+```typescript
+// Component
+email = new FormControl('initial@example.com', [
+  Validators.required,
+  Validators.email
+]);
+
+// Template
+<input [formControl]="email">
+<div *ngIf="email.errors?.['required']">Required</div>
+<div *ngIf="email.errors?.['email']">Invalid email</div>
+
+// Access value
+this.email.value;
+this.email.valueChanges.subscribe(val => {});
+this.email.statusChanges.subscribe(status => {});
+```
+
+### FormGroup (Multiple Fields)
+
+```typescript
+// Component
+form = new FormGroup({
+  email: new FormControl('', Validators.required),
+  password: new FormControl('', Validators.minLength(8)),
+  confirmPassword: new FormControl('')
+});
+
+// Template
+<form [formGroup]="form" (ngSubmit)="onSubmit()">
+  <input formControlName="email">
+  <input formControlName="password">
+  <input formControlName="confirmPassword">
+  <button [disabled]="form.invalid">Submit</button>
+</form>
+
+// Access form
+this.form.value;  // {email: '', password: '', confirmPassword: ''}
+this.form.valid;  // true/false
+this.form.get('email')?.value;
+this.form.get('email')?.errors;
+```
+
+### FormArray (Dynamic Fields)
+
+```typescript
+// Component
+form = new FormGroup({
+  emails: new FormArray([
+    new FormControl('', Validators.email)
+  ])
+});
+
+get emailsArray(): FormArray {
+  return this.form.get('emails') as FormArray;
+}
+
+addEmail() {
+  this.emailsArray.push(new FormControl(''));
+}
+
+removeEmail(i: number) {
+  this.emailsArray.removeAt(i);
+}
+
+// Template
+<div formArrayName="emails">
+  <div *ngFor="let email of emailsArray.controls; let i = index">
+    <input [formControlName]="i">
+    <button (click)="removeEmail(i)">Remove</button>
+  </div>
+</div>
+<button (click)="addEmail()">Add Email</button>
+```
+
+### Custom Validators
+
+```typescript
+// Validator function
+function passwordMatch(control: AbstractControl): ValidationErrors | null {
+  const password = control.get('password');
+  const confirmPassword = control.get('confirmPassword');
+
+  if (!password || !confirmPassword) return null;
+
+  return password.value === confirmPassword.value ? null : { passwordMatch: true };
+}
+
+// Use in form
+form = new FormGroup({
+  password: new FormControl(''),
+  confirmPassword: new FormControl('')
+}, { validators: passwordMatch });
+
+// Template
+<div *ngIf="form.errors?.['passwordMatch']">
+  Passwords don't match
+</div>
+```
+
+### Form Status & Value Changes
+
+```typescript
+// Watch for changes
+this.form.valueChanges.pipe(
+  debounceTime(500),
+  distinctUntilChanged(),
+  switchMap(value => this.api.validate(value))
+).subscribe(errors => {
+  // Handle validation errors
+});
+
+// Watch status (valid, invalid, pending)
+this.form.statusChanges.subscribe(status => {
+  console.log(status);  // VALID, INVALID, PENDING
+});
 ```
 
 ---
